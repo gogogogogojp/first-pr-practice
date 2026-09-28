@@ -11,3 +11,11 @@ Get-Greeting -Name "たろう"
 ```
 
 名前を省略すると「ゲストさん」にあいさつします。
+
+## テストの実行
+
+Windows に標準で入っている [Pester](https://pester.dev/) でテストできます。
+
+```powershell
+Invoke-Pester .\Greeting.Tests.ps1
+```
