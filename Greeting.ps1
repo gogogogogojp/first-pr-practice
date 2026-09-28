@@ -1,4 +1,4 @@
-function Get-Greeting {
+﻿function Get-Greeting {
     param(
         [string]$Name
     )
