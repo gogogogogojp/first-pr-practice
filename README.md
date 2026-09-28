@@ -1,13 +1,13 @@
 # first-pr-practice
 
 初めてのプルリクエストを練習するための、小さな PowerShell プロジェクトです。
-
+作った人：gogogogogojp
 ## 使い方
 
 ```powershell
 . .\Greeting.ps1
-Get-Greeting -Name "たろう"
-# => こんにちは、たろうさん!
+Get-Greeting -Name "ゴゴゴゴゴゴ"
+# => こんにちは、ゴゴ!
 ```
 
 名前を省略すると「ゲストさん」にあいさつします。
