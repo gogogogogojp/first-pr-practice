@@ -6,7 +6,7 @@
 
 ```powershell
 . .\Greeting.ps1
-Get-Greeting -Name "ゴゴゴゴゴゴ"
+Get-Greeting -Name "ゴゴゴゴゴ"
 # => こんにちは、ゴゴ!
 ```
 
