@@ -6,8 +6,8 @@
 
 ```powershell
 . .\Greeting.ps1
-Get-Greeting -Name "ゴゴゴゴゴゴ"
-# => こんにちは、ゴゴ!
+Get-Greeting -Name "ゴゴゴゴゴ"
+# => こんにちは、ゴゴゴゴゴさん!
 ```
 
 名前を省略すると「ゲストさん」にあいさつします。
