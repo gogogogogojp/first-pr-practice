@@ -21,4 +21,9 @@ agmsg と n8n の導入作業は、複数のプロジェクトで並行して進
 
 ## 結果欄
 
-（未記入）
+**ステータス：一部完了（外部フォルダの調査は要承認のため未実施）**
+
+- 実施: リポジトリ内を調査。agmsg / n8n の関連は `reports/`・`inbox/processed/`・`n8n-local/`・`logs/worker-20261121-1904.log` の 6 か所（認証情報の記載なし）。
+- 未実施: `OneDrive\claude\AIの作業場` 配下、`repos` 配下（本リポジトリ以外）、`~/.agents/skills/agmsg/`。作業範囲がリポジトリ内のみのため。
+- **要承認**: 外部フォルダを読み取り専用で調査してよいか。
+- 報告: `reports/2026-11-21_agmsg-n8n-scatter.md`
