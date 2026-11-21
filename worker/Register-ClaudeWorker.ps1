@@ -1,4 +1,4 @@
-# Register-ClaudeWorker.ps1
+﻿# Register-ClaudeWorker.ps1
 # ごとうの PC で1回だけ実行する想定（管理者権限は不要）。
 # 設計書: ~/workspace/claude-worker/DESIGN.md
 # 前提: リポジトリが "$env:USERPROFILE\repos\first-pr-practice" に clone 済みで push できること。

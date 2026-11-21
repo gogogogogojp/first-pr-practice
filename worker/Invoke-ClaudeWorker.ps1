@@ -1,4 +1,4 @@
-# Invoke-ClaudeWorker.ps1
+﻿# Invoke-ClaudeWorker.ps1
 # inbox/ の未処理依頼を Claude Code ヘッドレスで処理し、結果を push する
 # 設計書: ~/workspace/claude-worker/DESIGN.md（方式1：タスクスケジューラ）
 # 注意: first-pr-practice は public リポジトリのため、業務データ・顧客名を含む依頼は流さないこと。
