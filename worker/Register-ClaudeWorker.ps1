@@ -14,7 +14,7 @@ $triggers = @(
   (New-ScheduledTaskTrigger -Once -At (Get-Date) `
     -RepetitionInterval (New-TimeSpan -Minutes 30))
 )
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
 Register-ScheduledTask -TaskName "ClaudeWorker" `
   -Action $action -Trigger $triggers -Settings $settings
 Write-Output "登録完了: ClaudeWorker（ログオン時＋30分間隔）"
