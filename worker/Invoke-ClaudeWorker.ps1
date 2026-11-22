@@ -15,7 +15,7 @@ $logFile = Join-Path $logDir ("worker-{0:yyyyMMdd-HHmm}.log" -f (Get-Date))
 "=== worker start $(Get-Date -Format 'yyyy-MM-dd HH:mm') ===" | Out-File -Append $logFile
 
 # 1. 最新化
-git pull --ff-only
+git pull --no-edit
 if ($LASTEXITCODE -ne 0) {
   "pull failed (exit $LASTEXITCODE)" | Out-File -Append $logFile
   exit 1
@@ -38,7 +38,7 @@ inbox/$($req.Name) の依頼を処理してください。
 - 結果は依頼ファイルの「## 結果」欄に追記してください
 - 金銭・対人関係・外部への送信を伴う内容は実行せず、結果欄に「要承認」と書いてください
 "@
-  claude -p $prompt --allowedTools "Read,Edit,Write,Bash(git:*)"
+  claude -p $prompt --allowedTools "Read,Edit,Write,Bash"
   if ($LASTEXITCODE -eq 0) {
     Move-Item $req.FullName $processedDir
     "processed: $($req.Name)" | Out-File -Append $logFile
