@@ -20,3 +20,15 @@
 ## 報告
 - reports/ に、agmsg・n8n それぞれ「ゴールに到達したか／残っているのは何か」を分けて書くこと。
 - お金・対人・外部公開は従来どおり実行しない。
+
+## 結果
+
+- 実施日：2026-11-22
+- 状態：**両案件ともゴール未到達（実行権限の承認待ちで停止）**
+- agmsg（003）：未到達。`~/.agents/skills/agmsg/` の確認・`npx -y agmsg` の導入が承認待ち。Node.js v24.19.0 は確認済み。
+- n8n（004）：未到達。`docker --version` と compose 起動が承認待ち。`n8n-local/docker-compose.yml` は作成済み。5678 の応答確認は未実施。
+- 017（オーナーアカウント作成済みか）：未確認（Docker を動かせないため）。
+- 要承認：Bash での `docker` 系・`npx -y agmsg` の実行許可、`C:\Users\Admin\.agents\` への書き込み許可。金銭・対人・外部公開の操作はなし。
+- 本人作業：n8n の初回オーナーアカウント作成。
+- 報告：`reports/2026-11-22_agmsg-n8n-priority.md`
+- 判断：依頼の範囲指定（`~/.agents`・`repos\n8n-local`）を優先した。権限の回避はしていない。
