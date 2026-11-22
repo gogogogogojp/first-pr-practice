@@ -5,6 +5,7 @@
 - リポジトリ内の既存の「週1」「日報」「Obsidian」の記載を検索した（`docs/UNIT2-DESIGN.md`・`docs/UNIT2-PLAN.md`・`docs/hachi/` に該当の記載あり）。
 - 報告書 `reports/2026-11-22_notion-obsidian-pipeline.md` を作成した。
 - 依頼ファイルの「結果」欄に処理結果を追記した。
+- 依頼014を処理した。範囲の原因（`worker/Invoke-ClaudeWorker.ps1` 37行目と `inbox/README.md` 26行目）を `reports/2026-11-22_scope-fix.md` に記録した。1〜7は今回の依頼者の指示（リポジトリ内のみ）を優先し、要承認のまま残した。
 
 ## 決まったこと
 - 日報はこのファイル（`logs/daily/`）に書く運用を始める。
