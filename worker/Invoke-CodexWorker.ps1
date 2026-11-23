@@ -58,6 +58,7 @@ try {
             throw "移動先または報告書が既に存在します。$($request.Name)"
         }
 
+        $draftPath = Join-Path $logDir ($request.BaseName + '-' + [guid]::NewGuid().ToString('N') + '-Codex出力.md')
         Write-Log "処理開始 $($request.Name)"
         $prompt = @"
 inbox-codex/$($request.Name) を読み、依頼を処理してください。
@@ -71,21 +72,22 @@ inbox-codex/$($request.Name) を読み、依頼を処理してください。
         $previousPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'
-            & codex.cmd -a never exec --ignore-user-config --ephemeral --sandbox workspace-write --color never --output-last-message $reportPath $prompt *> $null
+            & codex.cmd -a never -c "windows.sandbox='elevated'" exec --ignore-user-config --ephemeral --sandbox workspace-write --color never --output-last-message $draftPath $prompt *> $null
             $codexExit = $LASTEXITCODE
         } finally {
             $ErrorActionPreference = $previousPreference
         }
 
-        if ($codexExit -ne 0 -or -not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+        if ($codexExit -ne 0 -or -not (Test-Path -LiteralPath $draftPath -PathType Leaf)) {
             throw "Codexの実行または報告書保存が失敗しました (exit $codexExit)。依頼は受付に残っています。"
         }
-        if ((Get-Content -LiteralPath $reportPath -Encoding UTF8 -TotalCount 1) -ne '# Codex作業報告書') {
+        if ((Get-Content -LiteralPath $draftPath -Encoding UTF8 -TotalCount 1) -ne '# Codex作業報告書') {
             throw '報告書の見出しが所定の形式と異なります。'
         }
         $deleted = Invoke-Git diff HEAD --no-renames --diff-filter=D --name-only --
         if ($deleted) { throw '削除されたファイルがあります。この回の変更を保留しました。' }
 
+        Move-Item -LiteralPath $draftPath -Destination $reportPath
         Move-Item -LiteralPath $request.FullName -Destination $processedPath
         Invoke-Git add -A -- @trackedPaths | Out-Null
         Invoke-Git ls-files --error-unmatch -- "reports/$([IO.Path]::GetFileName($reportPath))" | Out-Null
