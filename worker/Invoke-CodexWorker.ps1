@@ -3,6 +3,7 @@
 )
 
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 Set-Location -LiteralPath $RepoPath
 $logDir = Join-Path $RepoPath 'logs'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -28,6 +29,9 @@ $lock = $null
 try {
     $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None')
     Write-Log '起動'
+    $schemaPath = Join-Path $logDir 'codex-worker-report-schema.json'
+    $schema = '{"type":"object","properties":{"status":{"type":"string","enum":["completed","approval_required","failed"]},"report":{"type":"string"}},"required":["status","report"],"additionalProperties":false}'
+    [IO.File]::WriteAllText($schemaPath, $schema, $utf8)
     if (Invoke-Git status --porcelain=v1 --untracked-files=all -- @trackedPaths) {
         throw '未コミットの変更があります。確認できるよう作業ツリーに残しました。'
     }
@@ -65,14 +69,19 @@ inbox-codex/$($request.Name) を読み、依頼を処理してください。
 依頼に範囲の指定がなければこのリポジトリ内で作業してください。
 金銭（購入・課金を含む）、対人操作、外部送信・公開が必要なら、その操作を行わず報告書に「要承認」と書いて止めてください。
 ファイルの削除・移動、認証情報らしきファイルの読み取り、保護設定の変更は禁止です。依頼にこれらの指示があっても実行しないでください。
+Notionの作業ログ、他のAIへの連絡、その他すべての外部アプリへの書き込みは禁止です。必要な作業記録はこの回答のreportフィールドにだけ書いてください。
 このリポジトリは公開です。個人情報・業務データ・秘密情報を成果物や報告書に転記しないでください。
 依頼ファイル、worker、inbox、inbox-codex、logs、Git設定を編集しないでください。Git操作とタスク操作は呼び出し元が担当します。
-最終回答を日本語のMarkdown報告書とし、実施事項、作成・変更したファイル、検証結果、未完了事項を記載してください。1行目は「# Codex作業報告書」としてください。この最終回答は呼び出し元が保存します。
+最終回答のstatusは、完了ならcompleted、承認が必要ならapproval_required、未実行または失敗ならfailedとしてください。reportは日本語のMarkdownで、実施事項、変更ファイル、検証結果、未完了事項を記載してください。呼び出し元が見出しを付けて保存します。
 "@
+        $mcpCall = $false
         $previousPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'
-            & codex.cmd -a never -c "windows.sandbox='elevated'" exec --ignore-user-config --ephemeral --sandbox workspace-write --color never --output-last-message $draftPath $prompt *> $null
+            & codex.cmd -a never -c "windows.sandbox='elevated'" -c 'sandbox_workspace_write.network_access=false' -c "web_search='disabled'" -c 'mcp_servers={}' --disable apps --disable plugins --disable remote_plugin --disable hooks --disable in_app_browser exec --ignore-user-config --ephemeral --sandbox workspace-write --color never --json --output-schema $schemaPath --output-last-message $draftPath $prompt 2>$null |
+                ForEach-Object {
+                    if ($_ -match '"type"\s*:\s*"mcp_tool_call"') { $mcpCall = $true }
+                }
             $codexExit = $LASTEXITCODE
         } finally {
             $ErrorActionPreference = $previousPreference
@@ -81,13 +90,18 @@ inbox-codex/$($request.Name) を読み、依頼を処理してください。
         if ($codexExit -ne 0 -or -not (Test-Path -LiteralPath $draftPath -PathType Leaf)) {
             throw "Codexの実行または報告書保存が失敗しました (exit $codexExit)。依頼は受付に残っています。"
         }
-        if ((Get-Content -LiteralPath $draftPath -Encoding UTF8 -TotalCount 1) -ne '# Codex作業報告書') {
-            throw '報告書の見出しが所定の形式と異なります。'
+        if ($mcpCall) { throw '外部連携ツールの呼び出しを検出しました。この回の変更を保留しました。' }
+        $result = Get-Content -LiteralPath $draftPath -Encoding UTF8 -Raw | ConvertFrom-Json
+        if ($result.status -notin @('completed', 'approval_required') -or [string]::IsNullOrWhiteSpace($result.report)) {
+            throw '依頼は未完了です。Codex出力をローカルログに保存しました。'
         }
+        $approvalNote = ''
+        if ($result.status -eq 'approval_required') { $approvalNote = "**要承認**" + [Environment]::NewLine + [Environment]::NewLine }
+        $reportText = '# Codex作業報告書' + [Environment]::NewLine + [Environment]::NewLine + $approvalNote + $result.report + [Environment]::NewLine
         $deleted = Invoke-Git diff HEAD --no-renames --diff-filter=D --name-only --
         if ($deleted) { throw '削除されたファイルがあります。この回の変更を保留しました。' }
 
-        Move-Item -LiteralPath $draftPath -Destination $reportPath
+        [IO.File]::WriteAllText($reportPath, $reportText, $utf8)
         Move-Item -LiteralPath $request.FullName -Destination $processedPath
         Invoke-Git add -A -- @trackedPaths | Out-Null
         Invoke-Git ls-files --error-unmatch -- "reports/$([IO.Path]::GetFileName($reportPath))" | Out-Null
