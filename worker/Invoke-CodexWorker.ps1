@@ -16,6 +16,24 @@ function Write-Log([string]$Message) {
     [IO.File]::AppendAllText($logFile, ('{0:yyyy-MM-dd HH:mm:ss} {1}' -f (Get-Date), $Message) + [Environment]::NewLine, $utf8)
 }
 
+# ネット接続の判定（未接続なら静かに終了。失敗扱いにしない）
+# github.com の443番ポートへ5秒以内に接続できるかを見る（データは送らない）。
+function Test-Online([string]$HostName = 'github.com', [int]$Port = 443, [int]$TimeoutMs = 5000) {
+  $client = New-Object System.Net.Sockets.TcpClient
+  try {
+    $task = $client.ConnectAsync($HostName, $Port)
+    return ($task.Wait($TimeoutMs) -and $client.Connected)
+  } catch {
+    return $false
+  } finally {
+    $client.Dispose()
+  }
+}
+if (-not (Test-Online)) {
+  Write-Log 'オフラインのためスキップ'
+  exit 0
+}
+
 function Invoke-Git {
     $ErrorActionPreference = 'Continue'
     $output = & git.exe @args 2>&1

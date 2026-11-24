@@ -25,6 +25,14 @@ def 台帳を読む() -> list[dict]:
     return データ
 
 
+def 完了記録を探す(依頼ID: str, 版: str) -> dict | None:
+    """同じ依頼ID・版の「アント作成・完了」の記録を返す。無ければ None。（再配達の重複判定に使う）"""
+    for r in 台帳を読む():
+        if r.get("依頼ID") == 依頼ID and r.get("版") == 版 and r.get("工程") == "アント作成" and r.get("状態") == "完了":
+            return r
+    return None
+
+
 def 台帳を追記(記録: dict) -> None:
     データ = 台帳を読む()
     データ.append(記録)
