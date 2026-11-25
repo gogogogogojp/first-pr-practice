@@ -12,10 +12,10 @@ $action = New-ScheduledTaskAction -Execute "powershell.exe" `
 $triggers = @(
   (New-ScheduledTaskTrigger -AtLogOn),
   (New-ScheduledTaskTrigger -Once -At (Get-Date) `
-    -RepetitionInterval (New-TimeSpan -Minutes 30))
+    -RepetitionInterval (New-TimeSpan -Minutes 10))
 )
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
 Register-ScheduledTask -TaskName "ClaudeWorker" `
   -Action $action -Trigger $triggers -Settings $settings
-Write-Output "登録完了: ClaudeWorker（ログオン時＋30分間隔）"
+Write-Output "登録完了: ClaudeWorker（ログオン時＋10分間隔）"
 Write-Output "次に手動テスト: powershell -NoProfile -ExecutionPolicy Bypass -File `"$script`""
