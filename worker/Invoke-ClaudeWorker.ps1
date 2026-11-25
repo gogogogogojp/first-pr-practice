@@ -82,12 +82,16 @@ inbox/$($req.Name) の依頼を処理してください。
 "@
   $modelArgs = @()
   if ($Model) { $modelArgs = @('--model', $Model) }
-  claude -p $prompt --allowedTools "Read,Edit,Write,Bash" @modelArgs
-  if ($LASTEXITCODE -eq 0) {
+  # 実行時出力（stream-json）から利用率を取り出し、reports/利用枠_最新.md に書く（依頼092）
+  . (Join-Path $RepoPath 'worker\利用枠記録.ps1')
+  $claudeOutput = & claude -p $prompt --allowedTools "Read,Edit,Write,Bash" --output-format stream-json --verbose @modelArgs
+  $claudeExit = $LASTEXITCODE
+  "利用枠: $(Save-ClaudeUsage -Lines $claudeOutput -RepoPath $RepoPath -Source 'ClaudeWorker')" | Out-File -Append $logFile
+  if ($claudeExit -eq 0) {
     Move-Item $req.FullName $processedDir
     "processed: $($req.Name)" | Out-File -Append $logFile
   } else {
-    "FAILED (left in inbox): $($req.Name) exit $LASTEXITCODE" | Out-File -Append $logFile
+    "FAILED (left in inbox): $($req.Name) exit $claudeExit" | Out-File -Append $logFile
   }
 }
 

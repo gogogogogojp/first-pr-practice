@@ -121,6 +121,87 @@ function Test-WorkerHealth {
   }
 }
 
+# 詰まりの自動直し（依頼096）：Codexワーカーが「未コミットの変更があります」で止まり、
+# 原因が reports/ 配下の未追跡の報告書（.md）だけのときに限り、そのファイルをコミットして取り込む。
+# 削除・変更・それ以外のファイル・認証情報らしき名前は触らず、見張り報告に書くだけにする。
+# 取り消し（git checkout / reset --hard）や削除はしない。push は同ワーカーの次回実行で行われる。
+function Repair-CodexUntrackedReports {
+  $targets = @(
+    [pscustomobject]@{ Name = 'CodexWorker（オウル）'; Dir = (Join-Path $env:USERPROFILE 'repos\first-pr-practice-codex-worker');    Pattern = 'codex-worker-*.log';  Lock = 'codex-worker.lock' },
+    [pscustomobject]@{ Name = 'CodexWorker2';          Dir = (Join-Path $env:USERPROFILE 'repos\first-pr-practice-codex-worker2'); Pattern = 'codex-worker2-*.log'; Lock = 'codex-worker2.lock' }
+  )
+  foreach ($t in $targets) {
+    try { Repair-OneCodexWorker $t } catch { Write-Log "詰まりの自動直しで失敗（$($t.Name)）: $($_.Exception.Message)" }
+  }
+}
+
+function Repair-OneCodexWorker($t) {
+  if (-not (Test-Path -LiteralPath $t.Dir)) { return }
+  $workerLogDir = Join-Path $t.Dir 'logs'
+  $latest = Get-ChildItem -LiteralPath $workerLogDir -Filter $t.Pattern -File |
+    Sort-Object Name -Descending | Select-Object -First 1
+  if (-not $latest) { return }
+  # 直近のログが「未コミットの変更があります」での停止かを確認する（それ以外は対象外）
+  if ((Get-Content -LiteralPath $latest.FullName -Raw -Encoding UTF8) -notmatch '停止: 未コミットの変更があります') { return }
+
+  # Codex ワーカーが作業中なら触らない。ワーカーと同じロックを取れたときだけ直す。
+  $workerLock = $null
+  try {
+    $workerLock = [IO.File]::Open((Join-Path $workerLogDir $t.Lock), 'OpenOrCreate', 'ReadWrite', 'None')
+  } catch {
+    Write-Log "$($t.Name)は実行中のため、詰まりの自動直しを見送りました"
+    return
+  }
+  try {
+    # ワーカーと同じ条件（ログ除く）で、作業ツリーの変更を一覧にする
+    $ErrorActionPreference = 'Continue'
+    $entries = @(& git.exe -c core.quotepath=off -C $t.Dir status --porcelain=v1 --untracked-files=all -- . ':(exclude)logs' 2>&1 |
+      ForEach-Object { [string]$_ } | Where-Object { $_ -ne '' })
+    if ($LASTEXITCODE -ne 0) { throw "git status が失敗しました (exit $LASTEXITCODE)" }
+    if ($entries.Count -eq 0) { Write-Log "$($t.Name)：変更はないため何もしません"; return }
+
+    # 条件：すべて「未追跡（??）」の reports/ 配下の .md 報告書であること。1つでも外れたら触らない。
+    $secretPattern = '(?i)password|credential|secret|token|api[ _-]?key|認証情報|秘密鍵|パスワード'
+    $paths = @()
+    $others = @()
+    foreach ($line in $entries) {
+      $isReport = $false
+      if ($line -match '^\?\? (reports/.+\.md)$') {
+        $candidate = $Matches[1]
+        $isReport = -not ($candidate -match $secretPattern)
+      }
+      if ($isReport) { $paths += $candidate } else { $others += $line }
+    }
+    if ($others.Count -gt 0) {
+      Add-WatchReport $t.Name ('未コミットの変更が報告書以外にあるため自動では直しません（人の確認が必要）: ' + ($others -join ' / '))
+      return
+    }
+
+    # 取り込み：指定したファイルだけを stage して commit（削除・取り消しはしない）
+    try {
+      & git.exe -c core.quotepath=off -C $t.Dir add -- @paths
+      if ($LASTEXITCODE -ne 0) { throw "git add が失敗しました (exit $LASTEXITCODE)" }
+      $staged = @(& git.exe -c core.quotepath=off -C $t.Dir diff --cached --name-only | Where-Object { $_ -ne '' })
+      if (Compare-Object -ReferenceObject $staged -DifferenceObject $paths) {
+        throw '取り込み対象と一致しないため、commit せず取り消しました'
+      }
+      & git.exe -c core.quotepath=off -C $t.Dir commit -m "ハチ：未追跡の報告書を取り込み（自動）" | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "git commit が失敗しました (exit $LASTEXITCODE)" }
+    } catch {
+      # 途中で失敗したら stage を外す（ファイルの中身は変えない）
+      & git.exe -c core.quotepath=off -C $t.Dir reset -q -- @paths 2>$null
+      Add-WatchReport $t.Name ('自動の取り込みに失敗（コミットはしていません。ログを確認）: ' + $_.Exception.Message)
+      return
+    }
+    $names = ($paths | ForEach-Object { Split-Path -Leaf $_ }) -join '、'
+    Write-Log "$($t.Name)：未追跡の報告書を取り込みました: $names"
+    Add-WatchReport $t.Name ("自動で直しました：未追跡の報告書 $names をコミットして取り込み。" +
+      "なぜ：「未コミットの変更があります」で停止していたため。どう：git add と commit（削除・取り消しなし。push は次回実行で行われる）")
+  } finally {
+    $workerLock.Dispose()
+  }
+}
+
 # 1. 二重起動の防止（前回の回が動いていれば静かに終了）
 if (-not (Test-Online)) {
   Write-Log 'オフラインのためスキップ'
@@ -145,6 +226,9 @@ try {
 
   # 3. 見張り（Claude は呼ばない）
   try { Test-WorkerHealth } catch { Write-Log "見張りの確認で失敗: $($_.Exception.Message)" }
+
+  # 3の2. 詰まりの自動直し（決まったパターンだけ。依頼096）
+  Repair-CodexUntrackedReports
 
   # 4. 軽い作業の依頼（受付は inbox-claude2/。README は除く）
   $requests = @(Get-ChildItem -LiteralPath $inboxDir -Filter '*.md' -File |
@@ -186,12 +270,15 @@ inbox-claude2/$($request.Name) を読み、依頼を処理してください。
     $previousPreference = $ErrorActionPreference
     try {
       $ErrorActionPreference = 'Continue'
-      $claudeOutput = & claude -p $prompt --allowedTools 'Read,Edit,Write,Bash(git status:*),Bash(git log:*),Bash(git diff:*),Bash(ls:*),Bash(grep:*)' @modelArgs 2>&1
+      $claudeOutput = & claude -p $prompt --allowedTools 'Read,Edit,Write,Bash(git status:*),Bash(git log:*),Bash(git diff:*),Bash(ls:*),Bash(grep:*)' --output-format stream-json --verbose @modelArgs 2>&1
       $claudeExit = $LASTEXITCODE
     } finally {
       $ErrorActionPreference = $previousPreference
     }
-    @($claudeOutput) | Select-Object -Last 20 | ForEach-Object { Write-Log ([string]$_) }
+    # 出力（stream-json）は会話内容を含むためログに書かない。利用率だけ取り出して最新値へ書く（依頼092）
+    . (Join-Path $RepoPath 'worker\利用枠記録.ps1')
+    Write-Log ('利用枠: ' + (Save-ClaudeUsage -Lines @($claudeOutput) -RepoPath $RepoPath -Source 'ClaudeWorker2'))
+    Write-Log "claude 終了コード $claudeExit"
 
     # 完了の判定：正常終了かつ報告書がある場合だけ処理済みに移す（失敗した依頼は受付に残す）
     $reportExists = Test-Path -LiteralPath $reportPath -PathType Leaf
