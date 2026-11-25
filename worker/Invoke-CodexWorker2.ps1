@@ -54,7 +54,7 @@ try {
         throw '未コミットの変更があります。確認できるよう作業ツリーに残しました。'
     }
 
-    Invoke-Git pull --ff-only | Out-Null
+    Invoke-Git pull --no-edit --no-rebase | Out-Null
     if (Invoke-Git log '@{upstream}..HEAD' --oneline) {
         Invoke-Git push | Out-Null
     }
