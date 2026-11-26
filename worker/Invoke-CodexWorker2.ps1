@@ -43,6 +43,63 @@ function Invoke-Git {
     return $output
 }
 
+$maxConsecutiveFailures = 3
+$failPath = Join-Path $logDir 'codex-worker2-fail.json'
+
+# 依頼ごとの連続失敗の回数を logs に保存する（logs は Git の対象外）。
+function Read-FailMap {
+    $map = [ordered]@{}
+    if (Test-Path -LiteralPath $failPath) {
+        try {
+            $old = Get-Content -LiteralPath $failPath -Encoding UTF8 -Raw | ConvertFrom-Json
+            foreach ($p in $old.PSObject.Properties) { $map[$p.Name] = [int]$p.Value }
+        } catch {
+            Write-Log '連続失敗の記録を読めなかったため、0回として扱います'
+        }
+    }
+    return ,$map
+}
+
+function Get-FailCount([string]$Name) {
+    $map = Read-FailMap
+    if ($map.Contains($Name)) { return [int]$map[$Name] }
+    return 0
+}
+
+function Set-FailCount([string]$Name, [int]$Count) {
+    $map = Read-FailMap
+    if ($Count -le 0) { [void]$map.Remove($Name) } else { $map[$Name] = $Count }
+    [IO.File]::WriteAllText($failPath, ($map | ConvertTo-Json), $utf8)
+}
+
+# 保留報告書を作り、報告書だけを commit して push する（依頼はinboxに残す）。
+function Save-HoldReport([IO.FileInfo]$Request, [string]$Reason) {
+    $reportsDir = Join-Path $RepoPath 'reports'
+    New-Item -ItemType Directory -Force -Path $reportsDir | Out-Null
+    $holdName = $Request.BaseName + '_Codex保留報告書.md'
+    $nl = [Environment]::NewLine
+    $text = '# Codex保留報告書' + $nl + $nl + '**要確認**' + $nl + $nl +
+        "依頼 $($Request.Name) は連続 $maxConsecutiveFailures 回失敗したため、Codexの呼び出しを止めました。" + $nl +
+        '依頼ファイルは inbox に残しています。' + $nl + $nl +
+        "最後の失敗理由: $Reason" + $nl + $nl +
+        '再開するには、logs の codex-worker2-fail.json から該当の依頼名を消してください。' + $nl
+    [IO.File]::WriteAllText((Join-Path $reportsDir $holdName), $text, $utf8)
+    try {
+        Invoke-Git add -- "reports/$holdName" | Out-Null
+        Invoke-Git commit -m "CodexWorker2: 保留 $($Request.BaseName)" -- "reports/$holdName" | Out-Null
+        Invoke-Git push | Out-Null
+    } catch {
+        Write-Log "保留報告書の保存に失敗しました: $($_.Exception.Message)"
+    }
+}
+
+# Codexを呼んだのに完了しなかった回数を数える。3回目で保留報告書を出す。
+function Register-RequestFailure([IO.FileInfo]$Request, [string]$Reason) {
+    $count = (Get-FailCount $Request.Name) + 1
+    Set-FailCount $Request.Name $count
+    Write-Log "Codex失敗 ${count} 回目（連続）: $Reason"
+    if ($count -ge $maxConsecutiveFailures) { Save-HoldReport $Request $Reason }
+}
 $lock = $null
 try {
     $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None')
@@ -71,6 +128,11 @@ try {
             continue
         }
 
+        $failCount = Get-FailCount $request.Name
+        if ($failCount -ge $maxConsecutiveFailures) {
+            Write-Log "保留: 連続失敗 ${failCount} 回のため Codex を呼びません $($request.Name)"
+            continue
+        }
         $processedDir = Join-Path $RepoPath 'inbox-codex2\processed'
         $reportsDir = Join-Path $RepoPath 'reports'
         New-Item -ItemType Directory -Force -Path $processedDir, $reportsDir | Out-Null
@@ -106,11 +168,14 @@ Notionの作業ログ、他のAIへの連絡、その他すべての外部アプ
         }
 
         if ($codexExit -ne 0 -or -not (Test-Path -LiteralPath $draftPath -PathType Leaf)) {
+            Register-RequestFailure $request 'Codexの実行または報告書保存が失敗'
             throw "Codexの実行または報告書保存が失敗しました (exit $codexExit)。依頼は受付に残っています。"
         }
-        if ($mcpCall) { throw '外部連携ツールの呼び出しを検出しました。この回の変更を保留しました。' }
-        $result = Get-Content -LiteralPath $draftPath -Encoding UTF8 -Raw | ConvertFrom-Json
-        if ($result.status -notin @('completed', 'approval_required') -or [string]::IsNullOrWhiteSpace($result.report)) {
+        if ($mcpCall) { Register-RequestFailure $request '外部連携ツールの呼び出しを検出'; throw '外部連携ツールの呼び出しを検出しました。この回の変更を保留しました。' }
+        $result = $null
+        try { $result = Get-Content -LiteralPath $draftPath -Encoding UTF8 -Raw | ConvertFrom-Json } catch { $result = $null }
+        if (-not $result -or $result.status -notin @('completed', 'approval_required') -or [string]::IsNullOrWhiteSpace($result.report)) {
+            Register-RequestFailure $request '依頼は未完了（報告が空、またはstatusが不正）'
             throw '依頼は未完了です。Codex出力をローカルログに保存しました。'
         }
         $approvalNote = ''
@@ -121,6 +186,7 @@ Notionの作業ログ、他のAIへの連絡、その他すべての外部アプ
 
         [IO.File]::WriteAllText($reportPath, $reportText, $utf8)
         Move-Item -LiteralPath $request.FullName -Destination $processedPath
+        Set-FailCount $request.Name 0
         Invoke-Git add -A -- @trackedPaths | Out-Null
         Invoke-Git ls-files --error-unmatch -- "reports/$([IO.Path]::GetFileName($reportPath))" | Out-Null
         Invoke-Git commit -m "CodexWorker2: $($request.BaseName)" | Out-Null
