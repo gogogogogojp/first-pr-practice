@@ -11,6 +11,7 @@ $logFile = Join-Path $logDir ('codex-worker-{0:yyyyMMdd-HHmm}.log' -f (Get-Date)
 $trackedPaths = @('.', ':(exclude)logs')
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $lockPath = Join-Path $logDir 'codex-worker.lock'
+. (Join-Path $PSScriptRoot 'CodexWorkerGuard.ps1')
 
 function Write-Log([string]$Message) {
     [IO.File]::AppendAllText($logFile, ('{0:yyyy-MM-dd HH:mm:ss} {1}' -f (Get-Date), $Message) + [Environment]::NewLine, $utf8)
@@ -116,8 +117,13 @@ try {
     $schemaPath = Join-Path $logDir 'codex-worker-report-schema.json'
     $schema = '{"type":"object","properties":{"status":{"type":"string","enum":["completed","approval_required","failed"]},"report":{"type":"string"}},"required":["status","report"],"additionalProperties":false}'
     [IO.File]::WriteAllText($schemaPath, $schema, $utf8)
-    if (Invoke-Git status --porcelain=v1 --untracked-files=all -- @trackedPaths) {
-        throw '未コミットの変更があります。確認できるよう作業ツリーに残しました。'
+    # 未保存の変更は退避ブランチへ保存して main を最新に戻す（指示書を含む場合は従来どおり止める）
+    $dirty = @(Get-DirtyPaths)
+    if ($dirty.Count -gt 0) {
+        if (@($dirty | Where-Object { Test-InstructionFile $_ }).Count -gt 0) {
+            throw '未コミットの変更があります（指示書を含むため自動退避しません）。確認できるよう作業ツリーに残しました。'
+        }
+        $null = Save-ChangesToHoldBranch -Pathspec @('.', ':(exclude)logs') -Tag '未保存の変更' -Original (Get-CurrentBranch)
     }
 
     Invoke-Git pull --no-edit --no-rebase | Out-Null
@@ -177,6 +183,8 @@ Notionの作業ログ、他のAIへの連絡、その他すべての外部アプ
         } finally {
             $ErrorActionPreference = $previousPreference
         }
+        # 指示書の変更は取り込まず、退避ブランチへ保存して保留する（対策C1）
+        $instrHoldText = Hold-InstructionChanges (Get-CurrentBranch)
 
         if ($codexExit -ne 0 -or -not (Test-Path -LiteralPath $draftPath -PathType Leaf)) {
             Write-CodexErrorLog $errPath
@@ -192,7 +200,7 @@ Notionの作業ログ、他のAIへの連絡、その他すべての外部アプ
         }
         $approvalNote = ''
         if ($result.status -eq 'approval_required') { $approvalNote = "**要承認**" + [Environment]::NewLine + [Environment]::NewLine }
-        $reportText = '# Codex作業報告書' + [Environment]::NewLine + [Environment]::NewLine + $approvalNote + $result.report + [Environment]::NewLine
+        $reportText = '# Codex作業報告書' + [Environment]::NewLine + [Environment]::NewLine + $approvalNote + $result.report + [Environment]::NewLine + [Environment]::NewLine + [string]$instrHoldText
         $deleted = Invoke-Git diff HEAD --no-renames --diff-filter=D --name-only --
         if ($deleted) { throw '削除されたファイルがあります。この回の変更を保留しました。' }
 
