@@ -100,6 +100,15 @@ function Register-RequestFailure([IO.FileInfo]$Request, [string]$Reason) {
     Write-Log "Codex失敗 ${count} 回目（連続）: $Reason"
     if ($count -ge $maxConsecutiveFailures) { Save-HoldReport $Request $Reason }
 }
+# Codexのエラー出力を、実行ごとのログファイルの末尾30行までworkerのログへ残す。
+function Write-CodexErrorLog([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { Write-Log 'Codexのエラー出力のファイルがありません'; return }
+    $lines = @(Get-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction SilentlyContinue | Select-Object -Last 30)
+    if ($lines.Count -eq 0) { Write-Log 'Codexのエラー出力は空でした'; return }
+    Write-Log "Codexのエラー出力（末尾$($lines.Count)行）:"
+    foreach ($line in $lines) { Write-Log ('  ' + [string]$line) }
+}
+
 $lock = $null
 try {
     $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None')
@@ -142,7 +151,9 @@ try {
             throw "移動先または報告書が既に存在します。$($request.Name)"
         }
 
-        $draftPath = Join-Path $logDir ($request.BaseName + '-' + [guid]::NewGuid().ToString('N') + '-Codex出力.md')
+        $runId = $request.BaseName + '-' + [guid]::NewGuid().ToString('N')
+        $draftPath = Join-Path $logDir ($runId + '-Codex出力.md')
+        $errPath = Join-Path $logDir ($runId + '-Codexエラー.txt')
         Write-Log "処理開始 $($request.Name)"
         $prompt = @"
 inbox-codex/$($request.Name) を読み、依頼を処理してください。
@@ -158,7 +169,7 @@ Notionの作業ログ、他のAIへの連絡、その他すべての外部アプ
         $previousPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'
-            & codex.cmd -a never -c "windows.sandbox='elevated'" -c 'sandbox_workspace_write.network_access=false' -c "web_search='disabled'" -c 'mcp_servers={}' --disable apps --disable plugins --disable remote_plugin --disable hooks --disable in_app_browser exec --ignore-user-config --ephemeral --sandbox workspace-write --color never --json --output-schema $schemaPath --output-last-message $draftPath $prompt 2>$null |
+            & codex.cmd -a never -c "windows.sandbox='elevated'" -c 'sandbox_workspace_write.network_access=false' -c "web_search='disabled'" -c 'mcp_servers={}' --disable apps --disable plugins --disable remote_plugin --disable hooks --disable in_app_browser exec --ignore-user-config --ephemeral --sandbox workspace-write --color never --json --output-schema $schemaPath --output-last-message $draftPath $prompt 2>$errPath |
                 ForEach-Object {
                     if ($_ -match '"type"\s*:\s*"mcp_tool_call"') { $mcpCall = $true }
                 }
@@ -168,6 +179,7 @@ Notionの作業ログ、他のAIへの連絡、その他すべての外部アプ
         }
 
         if ($codexExit -ne 0 -or -not (Test-Path -LiteralPath $draftPath -PathType Leaf)) {
+            Write-CodexErrorLog $errPath
             Register-RequestFailure $request 'Codexの実行または報告書保存が失敗'
             throw "Codexの実行または報告書保存が失敗しました (exit $codexExit)。依頼は受付に残っています。"
         }
