@@ -29,8 +29,16 @@ function Test-Online([string]$HostName = 'github.com', [int]$Port = 443, [int]$T
     $client.Dispose()
   }
 }
-if (-not (Test-Online)) {
-  "オフラインのためスキップ" | Out-File -Append $logFile
+# オフラインが3回続いたら reports/オフライン警告.md に1行書く（依頼123・提案1）。警告の失敗で本処理は止めない。
+. (Join-Path $PSScriptRoot 'オフライン警告.ps1')
+$online = Test-Online
+try {
+  $offlineCount = Update-OfflineCount -RepoPath $RepoPath -Online $online
+} catch {
+  "オフライン回数の記録に失敗: $($_.Exception.Message)" | Out-File -Append $logFile
+}
+if (-not $online) {
+  "オフラインのためスキップ（連続 $offlineCount 回）" | Out-File -Append $logFile
   exit 0
 }
 
