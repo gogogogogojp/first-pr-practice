@@ -1,5 +1,9 @@
 ﻿param(
-    [string]$RepoPath = "$env:USERPROFILE\repos\first-pr-practice-codex-worker"
+    [string]$RepoPath = "$env:USERPROFILE\repos\first-pr-practice-codex-worker",
+    # 既定（依頼118）：オウル（Codexワーカー1）は GPT-6.2 Sol・思考の深さ「中」。
+    # 依頼に「モデル：」「思考の深さ：」の行があれば、その回だけ変える（大事な検収で「高」にする等）。
+    [string]$CodexModel = 'gpt-6.2-sol',
+    [string]$CodexEffort = 'medium'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -161,6 +165,14 @@ try {
         $draftPath = Join-Path $logDir ($runId + '-Codex出力.md')
         $errPath = Join-Path $logDir ($runId + '-Codexエラー.txt')
         Write-Log "処理開始 $($request.Name)"
+        # 依頼の「モデル：」「思考の深さ：」行で、この回だけ変える（依頼118）。使えない指定は既定に戻す。
+        . (Join-Path $PSScriptRoot 'モデル割り当て.ps1')
+        $requestText = Get-Content -LiteralPath $request.FullName -Raw -Encoding UTF8
+        $override = Get-RequestModelOverride -Text $requestText
+        $modelChoice = Resolve-RequestChoice -Requested $override.Model -Allowed $CodexModelMap -Default $CodexModel
+        $effortChoice = Resolve-RequestChoice -Requested $override.Effort -Allowed $EffortMap -Default $CodexEffort
+        $codexModelArgs = @('-m', $modelChoice.Value, '-c', ('model_reasoning_effort=' + $effortChoice.Value))
+        Write-Log "モデル: $($modelChoice.Value)（$($modelChoice.Source)）／思考の深さ: $($effortChoice.Value)（$($effortChoice.Source)） $($modelChoice.Note) $($effortChoice.Note)"
         $prompt = @"
 inbox-codex/$($request.Name) を読み、依頼を処理してください。
 依頼に範囲の指定がなければこのリポジトリ内で作業してください。
@@ -175,7 +187,7 @@ Notionの作業ログ、他のAIへの連絡、その他すべての外部アプ
         $previousPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'
-            & codex.cmd -a never -c "windows.sandbox='elevated'" -c 'sandbox_workspace_write.network_access=false' -c "web_search='disabled'" -c 'mcp_servers={}' --disable apps --disable plugins --disable remote_plugin --disable hooks --disable in_app_browser exec --ignore-user-config --ephemeral --sandbox workspace-write --color never --json --output-schema $schemaPath --output-last-message $draftPath $prompt 2>$errPath |
+            & codex.cmd -a never @codexModelArgs -c "windows.sandbox='elevated'" -c 'sandbox_workspace_write.network_access=false' -c "web_search='disabled'" -c 'mcp_servers={}' --disable apps --disable plugins --disable remote_plugin --disable hooks --disable in_app_browser exec --ignore-user-config --ephemeral --sandbox workspace-write --color never --json --output-schema $schemaPath --output-last-message $draftPath $prompt 2>$errPath |
                 ForEach-Object {
                     if ($_ -match '"type"\s*:\s*"mcp_tool_call"') { $mcpCall = $true }
                 }

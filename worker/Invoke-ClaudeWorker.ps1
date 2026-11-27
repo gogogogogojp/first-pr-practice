@@ -4,8 +4,8 @@
 # 注意: first-pr-practice は public リポジトリのため、業務データ・顧客名を含む依頼は流さないこと。
 param(
   [string]$RepoPath = "$env:USERPROFILE\repos\first-pr-practice",
-  # 空なら既定のモデルを使う。例: sonnet（依頼039の計画書の最終化で使う）
-  [string]$Model = ''
+  # 既定はSonnet（依頼118）。依頼ファイルに「モデル：Opus」と書かれた回だけ、その回だけOpusにする。
+  [string]$Model = 'claude-sonnet-5-5'
 )
 $ErrorActionPreference = 'Stop'
 Set-Location $RepoPath
@@ -80,13 +80,22 @@ inbox/$($req.Name) の依頼を処理してください。
 - 結果は依頼ファイルの「## 結果」欄に追記してください
 - 金銭・対人関係・外部への送信を伴う内容は実行せず、結果欄に「要承認」と書いてください
 "@
-  $modelArgs = @()
-  if ($Model) { $modelArgs = @('--model', $Model) }
+  # 依頼の「モデル：」「思考の深さ：」行で、この回だけ変える（依頼118）。使えない指定は既定に戻す。
+  . (Join-Path $PSScriptRoot 'モデル割り当て.ps1')
+  $requestText = Get-Content -LiteralPath $req.FullName -Raw -Encoding UTF8
+  $override = Get-RequestModelOverride -Text $requestText
+  $modelChoice = Resolve-RequestChoice -Requested $override.Model -Allowed $ClaudeModelMap -Default $Model
+  $effortChoice = Resolve-RequestChoice -Requested $override.Effort -Allowed $EffortMap -Default ''
+  $modelArgs = @('--model', $modelChoice.Value)
+  if ($effortChoice.Value) { $modelArgs += @('--effort', $effortChoice.Value) }
+  $effortLabel = if ($effortChoice.Value) { "$($effortChoice.Value)（$($effortChoice.Source)）" } else { '既定' }
+  "モデル: $($modelChoice.Value)（$($modelChoice.Source)）／思考の深さ: $effortLabel $($modelChoice.Note) $($effortChoice.Note)" | Out-File -Append $logFile
   # 実行時出力（stream-json）から利用率を取り出し、reports/利用枠_最新.md に書く（依頼092）
   . (Join-Path $RepoPath 'worker\利用枠記録.ps1')
   $claudeOutput = & claude -p $prompt --allowedTools "Read,Edit,Write,Bash" --output-format stream-json --verbose @modelArgs
   $claudeExit = $LASTEXITCODE
-  "利用枠: $(Save-ClaudeUsage -Lines $claudeOutput -RepoPath $RepoPath -Source 'ClaudeWorker')" | Out-File -Append $logFile
+  # 切り替え前後の比較用に、利用枠の行にもモデル名を残す（依頼118）
+  "利用枠: $(Save-ClaudeUsage -Lines $claudeOutput -RepoPath $RepoPath -Source 'ClaudeWorker')（モデル: $($modelChoice.Value)）" | Out-File -Append $logFile
   if ($claudeExit -eq 0) {
     Move-Item $req.FullName $processedDir
     "processed: $($req.Name)" | Out-File -Append $logFile

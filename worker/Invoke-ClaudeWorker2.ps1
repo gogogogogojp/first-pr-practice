@@ -265,8 +265,16 @@ inbox-claude2/$($request.Name) を読み、依頼を処理してください。
 "@
 
     Write-Log "処理開始 $($request.Name)"
-    $modelArgs = @()
-    if ($Model) { $modelArgs = @('--model', $Model) }
+    # 依頼の「モデル：」「思考の深さ：」行で、この回だけ変える（依頼118）。既定は Haiku。使えない指定は既定に戻す。
+    . (Join-Path $PSScriptRoot 'モデル割り当て.ps1')
+    $requestText = Get-Content -LiteralPath $request.FullName -Raw -Encoding UTF8
+    $override = Get-RequestModelOverride -Text $requestText
+    $modelChoice = Resolve-RequestChoice -Requested $override.Model -Allowed $ClaudeModelMap -Default $Model
+    $effortChoice = Resolve-RequestChoice -Requested $override.Effort -Allowed $EffortMap -Default ''
+    $modelArgs = @('--model', $modelChoice.Value)
+    if ($effortChoice.Value) { $modelArgs += @('--effort', $effortChoice.Value) }
+    $effortLabel = if ($effortChoice.Value) { "$($effortChoice.Value)（$($effortChoice.Source)）" } else { '既定' }
+    Write-Log "モデル: $($modelChoice.Value)（$($modelChoice.Source)）／思考の深さ: $effortLabel $($modelChoice.Note) $($effortChoice.Note)"
     $previousPreference = $ErrorActionPreference
     try {
       $ErrorActionPreference = 'Continue'
@@ -277,7 +285,7 @@ inbox-claude2/$($request.Name) を読み、依頼を処理してください。
     }
     # 出力（stream-json）は会話内容を含むためログに書かない。利用率だけ取り出して最新値へ書く（依頼092）
     . (Join-Path $RepoPath 'worker\利用枠記録.ps1')
-    Write-Log ('利用枠: ' + (Save-ClaudeUsage -Lines @($claudeOutput) -RepoPath $RepoPath -Source 'ClaudeWorker2'))
+    Write-Log ('利用枠: ' + (Save-ClaudeUsage -Lines @($claudeOutput) -RepoPath $RepoPath -Source 'ClaudeWorker2') + "（モデル: $($modelChoice.Value)）")
     Write-Log "claude 終了コード $claudeExit"
 
     # 完了の判定：正常終了かつ報告書がある場合だけ処理済みに移す（失敗した依頼は受付に残す）
