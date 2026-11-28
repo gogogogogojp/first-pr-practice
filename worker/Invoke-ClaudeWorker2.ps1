@@ -278,7 +278,8 @@ inbox-claude2/$($request.Name) を読み、依頼を処理してください。
     $previousPreference = $ErrorActionPreference
     try {
       $ErrorActionPreference = 'Continue'
-      $claudeOutput = & claude -p $prompt --allowedTools 'Read,Edit,Write,Bash(git status:*),Bash(git log:*),Bash(git diff:*),Bash(ls:*),Bash(grep:*)' --output-format stream-json --verbose @modelArgs 2>&1
+      # 依頼131：承認設定を「代わりに承認」相当へそろえる（アントと同じ。コマンド実行は確認なしで進める）
+      $claudeOutput = & claude -p $prompt --allowedTools 'Read,Edit,Write,Bash' --output-format stream-json --verbose @modelArgs 2>&1
       $claudeExit = $LASTEXITCODE
     } finally {
       $ErrorActionPreference = $previousPreference
