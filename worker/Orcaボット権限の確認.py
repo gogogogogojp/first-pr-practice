@@ -5,7 +5,9 @@
 - Orcaの保存データ（profile-state.db）を読み取り専用で開く。書き込みはしない。
 - ワーカーは画面の無い場所（Session 0）で動き、orca CLIがOrcaにつながらないため、
   ファイルから直接確かめる。
-- 終了コード: 0=承認モード(ask) / 1=ボット無し / 2=承認モード以外 / 3=読めない
+- 終了コード: 0=合格（承認を求める ask／代わりに承認 auto）/ 1=ボット無し
+  / 2=それ以外の権限 / 3=読めない
+- auto（代わりに承認）は親方の許可（2026-11-28）により合格扱い（依頼132）。
 """
 from __future__ import annotations
 
@@ -16,6 +18,8 @@ import sqlite3
 import sys
 
 ASK = "ask"
+AUTO = "auto"  # 代わりに承認（依頼132で合格に追加）
+PASS_MODES = (ASK, AUTO)
 
 
 def db_path() -> pathlib.Path:
@@ -61,7 +65,7 @@ def main() -> int:
         print(f"ボット「{name}」（中身: {agent}）: Same as chats（引き継ぎ先: {inherited}）→ 承認モードではない扱い")
         return 2
     print(f"ボット「{name}」（中身: {agent}）: 権限 = {mode}")
-    return 0 if mode == ASK else 2
+    return 0 if mode in PASS_MODES else 2
 
 
 if __name__ == "__main__":
