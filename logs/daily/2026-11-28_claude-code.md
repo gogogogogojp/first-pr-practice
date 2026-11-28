@@ -129,3 +129,18 @@
 - agmsgdからcodex-045への配達は成功（受理）。「bridge not running」は旧方式の表示
 - アントを handoff-test に登録し、codex-045とチームを揃えた。相談1件を送信、返信はまだ無し
 - 次：親方がCodexアプリで相談の表示を確認 → アントが返信を確認
+
+## 追記：Orca Botを使ったSlack自動通信の調査（読み取りのみ）
+- codex2・owl：Slack接続は未確認（`orca slack`・`orca bot connectors` はBotのチャットからしか実行できない）。
+- Orcaの自動化に `slack.mentioned`（本人のメンションで起動）あり。現在の自動化は0件。
+- Bot同士のSlack起動は未確認。ループ防止策（送信者・チャンネル・返信回数の限定）は報告書に記載。
+- 変更・投稿・常駐の導入：なし。
+- 報告書：`ふく１\reports\2026-11-28_Orca Botを使ったSlack自動通信の調査_報告書.md`
+- 本人の操作：codex2のBotチャットで `orca bot connectors` を実行、Slackアプリの有無を確認、方針（a）か（b）を決める。
+
+## 追記：方針（b）の採用と承認依頼
+- 本人の方針：Slackでのメンション起動（b）。既存機能を優先。
+- 設定変更・自動化の登録：未実施（承認待ち）。
+- 本人の操作：codex2・owl のBotチャットで `orca bot connectors` を実行し、結果を貼る。Slackアプリの接続・テスト用チャンネル参加を確認する。
+- 承認事項：A（codex2の自動化1件）、B（Slackアプリ接続）、C（チャンネル参加）、D（指示書への返信ルール追記）。
+- 報告書：`ふく１\reports\2026-11-28_Slackメンション起動の設定案と承認依頼_報告書.md`
