@@ -108,3 +108,24 @@
 - owlの権限：まだ未設定（代わりに承認になっていない）。SOUL.mdもA-3未記入。どちらも親方の画面操作待ち
 - 作成：`inbox-orca-owl/README.md`（試験用受付）。owlへの依頼は流していない
 - 次：親方が権限変更とSOUL.md追記 → アントが再確認 → モコが段階②を別依頼で
+
+## 追記：Claude Code・Slack連携の試験と方式調査
+- Slack MCPで ai-test-2026-11-28 の読み取り、投稿（ダミー1件）を確認。投稿は本人名で出る（Bot名ではない）。
+- 公式 Claude Code in Slack は廃止済み。後継 Claude Tag は個人プラン不可（要確認）。
+- メンションで自動起動するには自作Botが必要（本人のSlack操作と常駐設定が要る）。
+- 報告書：`ふく１\reports\2026-11-28_Claude Code・Slack連携の試験と方式調査_報告書.md`
+- 本人の判断待ち：Bot名での投稿の要否、メンション起動の要否、Slackの契約プラン。
+
+## 追記：Slack経由の自動通信の構成調査
+- 既存Slackプラグインは投稿・読み取りのみ（メンション受信は不可）。
+- Orcaには既存のBot機能（orca slack read/post、Bot：codex2・owl）あり。SlackアプリがBotに接続済みかは未確認。
+- 送信者識別：Botごとに別アプリ（推奨）、または chat:write.customize（再インストール要）。
+- メンション起動：Socket Mode（自作・常駐）が候補。Orca Botの受信は要確認。
+- 報告書：`ふく１\reports\2026-11-28_Slack経由の自動通信の構成調査_報告書.md`
+- 本人の確認待ち：Orca関係のSlackアプリの有無、Orca Bot受信の調査の進め方。
+
+## 追記：依頼137 codex-045の配信ブリッジ再開と実一巡
+- 判定：**未完成**。報告書：`reports/2026-11-28_137_codex-045の配信ブリッジ再開と実一巡_アント報告書.md`
+- agmsgdからcodex-045への配達は成功（受理）。「bridge not running」は旧方式の表示
+- アントを handoff-test に登録し、codex-045とチームを揃えた。相談1件を送信、返信はまだ無し
+- 次：親方がCodexアプリで相談の表示を確認 → アントが返信を確認
