@@ -82,3 +82,23 @@
 - B：codex2へ連絡し、「PR作成後に判定を見直す」をMEMORY.mdへ追記（SOUL.mdは未変更）。
 - C：段階②の検証計画（6項目）を記載。
 - 次：親方がowlを画面で作る → アントが確認と試験受付 `inbox-orca-owl/` の作成。
+
+## 追記：Slack・AI間通信の試験（承認：テスト専用チーム・テスト用Slackへのダミー送信）
+- 作成：Slack非公開チャンネル `ai-test-2026-11-28`、agmsgテストチーム `slack-test-2026-11-28`（Claude＝test-claude、Codex＝test-codex）。既存の ai-team は変更なし。
+- 結果：Claude→Slackのダミー送信を読み戻しで確認。Claude→Codex→Claudeの双方向往復を確認（履歴3件）。
+- Codex：公式Slack MCPは認証エラー（AuthRequired）で不可。agmsgで連携。
+- 改善ループ：3回（1回目は実行環境の権限、2回目は私の既読操作が原因で失敗。3回目で成功）。
+- agmsgd警告の原因：導入後に scripts の2件（orca/ops.sh、team-list.sh）が変更されていた。原因の特定は要確認。変更なし。
+- 報告書：`ふく１\reports\2026-11-28_Slack・AI間通信の試験結果_報告書.md`
+- 未完了：既存 ai-team への参加（保留）、Slackの契約プラン確認（要確認）、テスト環境の残す・削除の判断（本人）。
+
+## 追記：既存 ai-team へのCodex席の参加（本人の指示で実施）
+- 参加：`codex-slack`（codex）を ai-team に追加。作業フォルダ：`ふく１\02_作業中\AI間通信_Codex席`（新規作成）。
+- 名簿：既存の claude-main・claude-wix は変更なし。合計3名。
+- 未実施：ai-team への送信・テスト（既存AIへの影響があるため、本人の確認後）。
+
+## 追記：依頼135 owlは親方が画面で作成（134の続き）
+- 判定：**完成**。読み取りのみ。結果は134の報告書の末尾に追記
+- owl：作成済み。名前・Codex・gpt-6.2-sol・思考medium・この Windows はOK
+- 違い：権限「代わりに承認」が未設定（既定のフルアクセスの可能性）。SOUL.mdに既定の禁止文が残る
+- 次：親方が Bot settings → Permissions → 代わりに承認 に変更 → アントが再確認と `inbox-orca-owl/` 作成
